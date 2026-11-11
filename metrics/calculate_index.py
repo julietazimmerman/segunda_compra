@@ -1,8 +1,8 @@
 """Cálculo de CTR por campaña y segmento, y construcción de la matriz para el dashboard.
 
     CTR = (Clics / Impresiones) x 100
-        Impresiones = eventos push_delivered
-        Clics       = eventos push_session
+        Impresiones = eventos push_delivered / email_delivered
+        Clics       = socials que clickearon (push_session / email_click), máx. 1 por social x campaña
 
     Diferencia vs. promedio = CTR_campaña / CTR_promedio_segmento - 1
         CTR_promedio_segmento = clics de todas las campañas del test / impresiones de todas las campañas del test
@@ -18,9 +18,11 @@ import pandas as pd
 SIN_DATOS = 'Sin datos'
 
 # Secciones de la matriz, en el orden en que se muestran en el dashboard.
-#   source: de qué tabla sale la dimensión (attrs / searches)
-#   column: columna a agrupar luego del merge con push
+#   key:    nombre de la dimensión; debe coincidir con la columna 'dimension' de queries/matrix_events.sql
+#   source: de qué tabla del lake sale (attrs / searches), solo informativo
+#   column: columna del social (para convertir caches viejos con a_formato_largo)
 #   order:  orden fijo de segmentos (None = por impresiones desc)
+# Para agregar una dimensión: sumarla acá Y en el SELECT / GROUPING SETS de matrix_events.sql.
 DIMENSIONES = [
     {'key': 'traveler_type', 'label': 'Tipo de viajero', 'icon': '🧳', 'source': 'attrs',
      'column': 'traveler_type', 'order': ['Solo', 'Pareja', 'Familia', 'Grupo', SIN_DATOS]},
@@ -113,34 +115,46 @@ def _texto(serie):
     return s.map(lambda v: SIN_DATOS if v is None or str(v).strip() == '' else str(v).strip())
 
 
-def _preparar_fuentes(push_df, attrs_df, searches_df):
-    """Devuelve un DataFrame por fuente, ya mergeado con push y con las columnas de segmento listas.
+LARGO_KEYS = ['journey_name', 'variante_raw', 'canal', 'pais']
+LARGO_VALS = ['delivered', 'clicked', 'socials', 'clic_sin_imp']
 
-    Todas las fuentes llevan `pais` (país del social) para el filtro de país del dashboard."""
-    push = push_df[['social_id', 'journey_label', 'variante', 'delivered', 'clicked']].copy()
-    push['delivered'] = pd.to_numeric(push['delivered'], errors='coerce').fillna(0).astype(int)
-    push['clicked'] = pd.to_numeric(push['clicked'], errors='coerce').fillna(0).astype(int)
 
-    # Atributos: 1 a 1 (salvaguarda por si la query devolviera más de una fila por social).
-    attrs = attrs_df.drop_duplicates('social_id')
-    a = push.merge(attrs, on='social_id', how='left')
+def a_formato_largo(wide_df):
+    """Pasa una tabla con valores CRUDOS del social (una fila por social o perfil) al formato largo que
+    devuelve queries/matrix_events.sql: journey x campaña x canal x país x dimensión x segmento.
+    Solo se usa para convertir caches viejos; con datos nuevos los segmentos se arman en SQL."""
+    e = _preparar(wide_df)
+    partes = []
+    for dim in DIMENSIONES:
+        col = dim['column']
+        keys = LARGO_KEYS if col == 'country' else LARGO_KEYS + [col]
+        g = e.groupby(keys, dropna=False)[LARGO_VALS].sum().reset_index()
+        g['dimension'] = dim['key']
+        g['segmento'] = g['pais'] if col == 'country' else g[col]
+        partes.append(g[LARGO_KEYS + ['dimension', 'segmento'] + LARGO_VALS])
+    return pd.concat(partes, ignore_index=True)
+
+
+def _preparar(events_df):
+    """Arma las columnas de segmento a partir de los valores crudos del social (mismos cortes que
+    queries/matrix_events.sql). Lleva `pais` (país del social) para el filtro."""
+    e = events_df.copy()
+    for col in ('delivered', 'clicked'):
+        e[col] = pd.to_numeric(e[col], errors='coerce').fillna(0).astype(int)
     for col in ('traveler_type', 'card', 'status', 'country'):
-        a[col] = _texto(a[col])
-    a['pais'] = a['country']
-    cupon = pd.to_numeric(a['used_cupon'], errors='coerce')
-    a['used_cupon'] = cupon.map({1: 'Sí', 0: 'No'}).fillna(SIN_DATOS)
-    a['uso_cuotas'] = pd.to_numeric(a['cantidad_cuotas'], errors='coerce').map(_uso_cuotas)
-
-    # Búsquedas: LEFT JOIN, los socials sin búsquedas van al rango "0".
-    base = a[['social_id', 'journey_label', 'variante', 'delivered', 'clicked', 'pais']]
-    s = base.merge(searches_df, on='social_id', how='left')
+        e[col] = _texto(e[col])
+    e['pais'] = e['country']
+    e['canal'] = _texto(e['canal'])
+    cupon = pd.to_numeric(e['used_cupon'], errors='coerce')
+    e['used_cupon'] = cupon.map({1: 'Sí', 0: 'No'}).fillna(SIN_DATOS)
+    e['uso_cuotas'] = pd.to_numeric(e['cantidad_cuotas'], errors='coerce').map(_uso_cuotas)
+    # Búsquedas: los socials sin búsquedas vienen en 0 y van al rango "0".
     for col in ('nro_busquedas', 'destinos_distintos', 'productos_distintos'):
-        s[col] = pd.to_numeric(s[col], errors='coerce').fillna(0)
-    s['rango_busquedas'] = s['nro_busquedas'].map(_rango_busquedas)
-    s['destinos_distintos'] = s['destinos_distintos'].map(lambda n: _cap(n, 5))
-    s['productos_distintos'] = s['productos_distintos'].map(lambda n: _cap(n, 3))
-
-    return {'attrs': a, 'searches': s}
+        e[col] = pd.to_numeric(e[col], errors='coerce').fillna(0)
+    e['rango_busquedas'] = e['nro_busquedas'].map(_rango_busquedas)
+    e['destinos_distintos'] = e['destinos_distintos'].map(lambda n: _cap(n, 5))
+    e['productos_distintos'] = e['productos_distintos'].map(lambda n: _cap(n, 3))
+    return e
 
 
 def _ordenar(segmentos, totales, order):
@@ -159,68 +173,78 @@ def _estructura_tests(push_df, tests_config):
     for t in tests_config or []:
         if t['label'] not in con_datos.index:
             continue
-        campaigns = [{'label': c['label'], 'mensaje': c.get('mensaje', '')} for c in t['campaigns']]
+        campaigns = [{'label': c['label'], 'mensaje': c.get('mensaje', ''), 'canales': c.get('canales', [])}
+                     for c in t['campaigns']]
         conocidas = {c['label'] for c in campaigns}
-        campaigns += [{'label': v, 'mensaje': ''} for v in sorted(con_datos[t['label']]) if v not in conocidas]
+        campaigns += [{'label': v, 'mensaje': '', 'canales': []} for v in sorted(con_datos[t['label']]) if v not in conocidas]
         tests.append({'label': t['label'], 'journeys': t.get('journeys', []), 'paises': t.get('paises', []),
-                      'fecha_inicio': t.get('fecha_inicio', ''), 'campaigns': campaigns})
+                      'canales': t.get('canales', []), 'fecha_inicio': t.get('fecha_inicio', ''),
+                      'campaigns': campaigns})
     return tests
 
 
 # ---------------------------------------------------------------------------
 # Matriz completa
 # ---------------------------------------------------------------------------
-def build_matrix(push_df, attrs_df, searches_df, settings_config, tests=None):
+CANALES_ORDEN = ['Push', 'Email']
+
+
+def build_matrix(events_df, settings_config, tests=None):
     """Construye el payload de data/matrix.json.
 
-    `push_df.journey_label` debe ser el label del TEST (journeys de distintos países ya unificados).
-    `celdas`: una fila por dimensión x segmento x país x test x campaña con impresiones y clics.
-    El dashboard filtra por país/test, calcula CTR = clics / impresiones x 100 por celda y compara
+    `events_df` viene en formato largo (queries/matrix_events.sql): journey x campaña x canal x país x
+    dimensión x segmento. `journey_label` debe ser el label del TEST y `variante` el label de la campaña
+    (push y email de una misma variante comparten label, y por lo tanto columna).
+    `celdas`: una fila por dimensión x segmento x país x canal x test x campaña con impresiones y clics.
+    El dashboard filtra por test/país/canal, calcula CTR = clics / impresiones x 100 por celda y compara
     cada campaña contra el CTR promedio del segmento dentro de su propio test.
     """
     settings = (settings_config or {}).get('settings') or {}
-    tests = _estructura_tests(push_df, tests)
+    tests = _estructura_tests(events_df, tests)
 
-    fuentes = _preparar_fuentes(push_df, attrs_df, searches_df)
+    df = events_df.copy()
+    for col in ('delivered', 'clicked'):
+        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
+    for col in ('pais', 'canal', 'segmento'):
+        df[col] = _texto(df[col])
     celdas, dimensiones = [], []
     for dim in DIMENSIONES:
-        df = fuentes[dim['source']]
-        if df.empty:
+        sub = df[df['dimension'] == dim['key']]
+        if sub.empty:
             continue
-        col = dim['column']
-        keys = [col, 'journey_label', 'variante'] if col == 'country' else [col, 'pais', 'journey_label', 'variante']
-        g = df.groupby(keys)[['delivered', 'clicked']].sum().reset_index()
-        if col == 'country':
-            g['pais'] = g[col]
-        totales = g.groupby(col)['delivered'].sum().to_dict()
+        g = (sub.groupby(['segmento', 'pais', 'canal', 'journey_label', 'variante'])[['delivered', 'clicked']]
+                .sum().reset_index())
+        totales = g.groupby('segmento')['delivered'].sum().to_dict()
         dimensiones.append({'key': dim['key'], 'label': dim['label'], 'icon': dim['icon'],
                             'segmentos': _ordenar(list(totales), totales, dim['order'])})
         for r in g.itertuples(index=False):
-            celdas.append({'d': dim['key'], 's': getattr(r, col), 'p': r.pais, 'j': r.journey_label,
+            celdas.append({'d': dim['key'], 's': r.segmento, 'p': r.pais, 'c': r.canal, 'j': r.journey_label,
                            'v': r.variante, 'imp': int(r.delivered), 'clk': int(r.clicked)})
 
-    paises = (fuentes['attrs'].groupby('pais')['delivered'].sum().sort_values(ascending=False).index.tolist())
-    delivered = int(pd.to_numeric(push_df['delivered'], errors='coerce').fillna(0).sum())
-    clicked = int(pd.to_numeric(push_df['clicked'], errors='coerce').fillna(0).sum())
+    df = df[df['dimension'] == 'country']   # totales: cada social cuenta una sola vez
+    paises = df.groupby('pais')['delivered'].sum().sort_values(ascending=False).index.tolist()
+    en_datos = set(df['canal'])
+    canales = [c for c in CANALES_ORDEN if c in en_datos] + sorted(en_datos - set(CANALES_ORDEN))
     return {
         'tests': tests,
         'paises': paises,
+        'canales': canales,
         'dimensiones': dimensiones,
         'celdas': celdas,
         'metadata': {
             'journeys': [t['label'] for t in tests],
-            'total_socials': int(push_df['social_id'].nunique()),
-            'total_impresiones': delivered,
-            'total_clics': clicked,
+            'total_impresiones': int(df['delivered'].sum()),
+            'total_clics': int(df['clicked'].sum()),
             'fecha_calculo': datetime.now().astimezone().isoformat(timespec='seconds'),
             'min_delivered': int(settings.get('min_delivered', 0) or 0),
-            'formula': 'CTR = (Clics / Impresiones) x 100',
+            'formula': 'CTR = (Socials con clic / Impresiones) x 100',
         },
     }
 
 
-def resumen_ctr(push_df):
-    """Tabla journey x campaña con impresiones, clics y CTR % (para imprimir en consola)."""
-    g = push_df.groupby(['journey_label', 'journey_name', 'variante'])[['delivered', 'clicked']].sum()
+def resumen_ctr(events_df):
+    """Tabla test x canal x variante con impresiones, clics y CTR % (para imprimir en consola)."""
+    tot = events_df[events_df['dimension'] == 'country']
+    g = tot.groupby(['journey_label', 'canal', 'variante'])[['delivered', 'clicked']].sum()
     g['ctr_%'] = (100 * g['clicked'] / g['delivered']).round(2)
     return g.rename(columns={'delivered': 'impresiones', 'clicked': 'clics'})

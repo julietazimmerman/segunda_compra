@@ -107,7 +107,8 @@ thead th{ font-size:10px; font-weight:600; text-transform:uppercase; letter-spac
           padding:8px 6px; border-bottom:1px solid #eee; text-align:center; white-space:nowrap; background:#fff; }
 thead tr.jrow th{ text-transform:none; letter-spacing:0; font-size:11px; color:var(--title); padding:6px 6px 4px; border-bottom:none; }
 thead tr.jrow th .jmeta{ display:block; font-size:10px; font-weight:500; color:var(--muted); }
-thead tr.crow th{ cursor:default; }
+thead tr.crow th{ cursor:default; white-space:normal; max-width:130px; vertical-align:bottom; }
+thead tr.crow th .cmeta{ display:block; font-size:9px; font-weight:500; color:var(--muted); text-transform:none; letter-spacing:0; margin-top:2px; }
 th.left, td.left{ text-align:left; }
 tbody td{ font-size:12px; color:#333; padding:4px 6px; border-bottom:1px solid #f5f5f5; white-space:nowrap; }
 tbody tr.seg:hover td{ background:#fafafa; }
@@ -186,7 +187,7 @@ footer{ margin-top:36px; border-top:1px solid #eee; padding-top:14px; font-size:
   <div id="content"></div>
 
   <footer id="footer">
-    Fuente: Insider Architect (sot.insider_mobile_app_events: push_delivered = impresión, push_session = clic) × audiencia tmp.socials_variables_2nd_trip / tmp.socials_trafico_2nd_trip. Tests definidos en tests.csv.
+    Fuente: Insider Architect (sot.insider_mobile_app_events: push_delivered = impresión, push_session = clic · sot.insider_email_events: email_delivered = impresión, email_click = clic; clics = socials que clickearon) × audiencia tmp.socials_variables_2nd_trip / tmp.socials_trafico_2nd_trip. Tests definidos en tests.csv.
   </footer>
 </div>
 <div class="tooltip" id="tooltip"></div>
@@ -203,7 +204,7 @@ footer{ margin-top:36px; border-top:1px solid #eee; padding-top:14px; font-size:
   const ctr = (clk, imp) => (imp > 0 ? (clk / imp) * 100 : null);
 
   let DATA = null;
-  const filters = { tests: [], paises: [] };   // [] = sin restricción
+  const filters = { tests: [], paises: [], canales: [] };   // [] = sin restricción
   let rendered = [];               // filas visibles (para el tooltip)
   let visibleTests = [];           // tests visibles, con sus campañas
   // 'ctr':    celda = CTR; color vs. CTR promedio ponderado del segmento en su test (clics totales / impresiones totales).
@@ -237,6 +238,8 @@ footer{ margin-top:36px; border-top:1px solid #eee; padding-top:14px; font-size:
       options: () => (DATA.tests || []).map((t) => ({ value: t.label, meta: (t.paises || []).join(', ') + ' · desde ' + fmtDate(t.fecha_inicio) })) },
     { key: 'paises', label: 'País del social', all: 'Todos los países',
       options: () => (DATA.paises || []).map((p) => ({ value: p, meta: '' })) },
+    { key: 'canales', label: 'Canal', all: 'Todos los canales',
+      options: () => (DATA.canales || ['Push']).map((c) => ({ value: c, meta: '' })) },
   ];
 
   function buildFilters() {
@@ -302,7 +305,8 @@ footer{ margin-top:36px; border-top:1px solid #eee; padding-top:14px; font-size:
     // dim -> seg -> journey -> campaña -> {imp, clk}
     const agg = {};
     DATA.celdas.forEach((c) => {
-      if (!matchFilter(c.j, filters.tests) || !matchFilter(c.p, filters.paises)) return;
+      if (!matchFilter(c.j, filters.tests) || !matchFilter(c.p, filters.paises) ||
+          !matchFilter(c.c || 'Push', filters.canales)) return;
       const d = agg[c.d] || (agg[c.d] = {});
       const s = d[c.s] || (d[c.s] = {});
       const j = s[c.j] || (s[c.j] = {});
@@ -418,8 +422,8 @@ footer{ margin-top:36px; border-top:1px solid #eee; padding-top:14px; font-size:
 
     let html =
       '<div class="kpis">' +
-      kpi('Impresiones', fmtInt(total.imp), 'eventos push_delivered') +
-      kpi('Clics', fmtInt(total.clk), 'eventos push_session') +
+      kpi('Impresiones', fmtInt(total.imp), 'push_delivered + email_delivered') +
+      kpi('Clics', fmtInt(total.clk), 'socials que clickearon (push o email)') +
       kpi('CTR', fmtCtr(ctr(total.clk, total.imp)), 'clics ÷ impresiones × 100') +
       kpi('Tests', visibleTests.length, nCamp + ' campañas') +
       '</div>' +
@@ -430,9 +434,10 @@ footer{ margin-top:36px; border-top:1px solid #eee; padding-top:14px; font-size:
           'Ejemplo: 2,73% ÷ 2,50% − 1 = +9%. El color va del verde (+' + SCALE + '% o más) al amarillo (0, en el promedio) y al rojo (−' + SCALE +
           '% o menos). El borde azul marca la variante ganadora del test en esa fila. Las celdas atenuadas tienen menos de ' + LOW_CLICKS +
           ' clics: tomalas con cuidado. Se muestran segmentos con al menos ' + fmtInt(minImp) + ' impresiones.</div>'
-        : '<div class="insight"><strong>CTR = (Clics ÷ Impresiones) × 100</strong><br>' +
+        : '<div class="insight"><strong>CTR = (Socials con clic ÷ Impresiones) × 100</strong><br>' +
           'Cada celda es el CTR de esa campaña para ese segmento. Cada test agrupa sus journeys de todos los países; para ver un país, usá el filtro ' +
-          'o la sección País. El color compara la campaña contra el CTR promedio del segmento <strong>dentro de su test</strong>: del verde ' +
+          'o la sección País. Si una variante salió por push y por email, con los dos canales seleccionados la celda suma ambos: usá el filtro ' +
+          'Canal para verlos por separado. El color compara la campaña contra el CTR promedio del segmento <strong>dentro de su test</strong>: del verde ' +
           '(+' + SCALE + '% o más sobre el promedio) al amarillo (en el promedio) y al rojo (−' + SCALE + '% o menos). El borde azul marca la campaña ' +
           'con mayor CTR del test en esa fila. Las celdas atenuadas tienen menos de ' + LOW_CLICKS + ' clics: tomalas con cuidado. ' +
           'Se muestran segmentos con al menos ' + fmtInt(minImp) + ' impresiones.</div>');
@@ -444,7 +449,8 @@ footer{ margin-top:36px; border-top:1px solid #eee; padding-top:14px; font-size:
       head1 += '<th class="gstart" colspan="' + t.campaigns.length + '">' + esc(t.label) +
         '<span class="jmeta">' + esc((t.paises || []).join(', ')) + ' · desde ' + fmtDate(t.fecha_inicio) + '</span></th>';
       t.campaigns.forEach((c, ci) => {
-        head2 += '<th' + (ci === 0 ? ' class="gstart"' : '') + ' title="' + esc(c.mensaje || c.label) + '">' + esc(c.label) + '</th>';
+        head2 += '<th' + (ci === 0 ? ' class="gstart"' : '') + ' title="' + esc(c.mensaje || c.label) + '">' + esc(c.label) +
+          ((c.canales || []).length ? '<span class="cmeta">' + esc(c.canales.join(' + ')) + '</span>' : '') + '</th>';
       });
     });
     head1 += '</tr>';
