@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Análisis de Performance de Mensajes por Audiencia</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
+
+:root{
+  --bg:#f5f1fb;
+  --card:#ffffff;
+  --border:#e8e8e8;
+
+  --text:#16203f;
+  --title:#0c1028;
+  --muted:#8c92a3;
+  --light:#aaa;
+
+  --blue:#1A3FA0;
+  --blue-2:#378ADD;
+  --blue-soft:#EAF2FF;
+
+  --violet:#8B5CF6;
+  --violet-soft:#F2E6FB;
+
+  --green:#087456;
+  --green-soft:#E8F6F0;
+
+  --red:#E24B4A;
+  --red-soft:#FCEBEB;
+
+  --orange:#CF3B24;
+  --orange-soft:#FDECEA;
+
+  --shadow:0 1px 5px rgba(30,34,60,.05);
+}
+
+*{ box-sizing:border-box; font-family:'Poppins', sans-serif; }
+body{ margin:0; background:var(--bg); color:var(--text); }
+.wrap{ max-width:1600px; margin:0 auto; padding:28px 24px 24px; }
+
+/* Header */
+.header{ display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; margin-bottom:18px; }
+h1{ font-size:22px; font-weight:700; color:var(--title); line-height:1.1; letter-spacing:0; margin:0 0 10px; }
+.label{ font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--light); }
+.journeys{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.pill{ display:inline-flex; align-items:center; padding:2px 8px; border-radius:20px; font-size:10px; font-weight:600;
+       background:var(--blue-soft); color:var(--blue); border:1px solid rgba(26,63,160,.25); }
+.updated{ text-align:right; }
+.updated .value{ font-size:12px; color:var(--muted); margin-top:2px; }
+
+/* Cards */
+.card{ background:var(--card); border:1px solid var(--border); border-radius:15px; box-shadow:var(--shadow); padding:18px 22px; }
+
+/* Filtros */
+.filters{ display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; margin-bottom:14px; }
+.filter{ position:relative; min-width:320px; }
+.filter .label{ display:block; margin-bottom:6px; }
+.filter-trigger{ width:100%; min-height:40px; padding:8px 34px 8px 12px; font-size:12px; color:var(--text); background:#fff;
+                 border:1px solid var(--border); border-radius:10px; cursor:pointer; text-align:left; position:relative; }
+.filter-trigger::after{ content:'▾'; position:absolute; right:12px; top:50%; transform:translateY(-50%); color:var(--muted); }
+.filter-trigger:focus{ outline:none; border-color:#b8c7f3; box-shadow:0 0 0 3px rgba(26,63,160,.08); }
+.filter-menu{ display:none; position:absolute; top:100%; left:0; right:0; margin-top:4px; z-index:20; background:#fff;
+              border:1px solid var(--border); border-radius:10px; box-shadow:0 8px 24px rgba(20,30,60,.14); padding:6px; }
+.filter.open .filter-menu{ display:block; }
+.filter-option{ display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:8px; font-size:12px; cursor:pointer; user-select:none; }
+.filter-option:hover{ background:#fafafa; }
+.filter-option .box{ font-size:14px; color:var(--muted); width:16px; }
+.filter-option.selected .box{ color:var(--blue); }
+.filter-option.selected{ color:var(--title); font-weight:500; }
+.filter-option .meta{ margin-left:auto; font-size:10px; color:var(--light); }
+.filter-hint{ font-size:10px; color:var(--muted); padding:6px 10px 2px; border-top:1px solid #f0f0f0; margin-top:4px; }
+
+/* Tabs */
+.tabs{ display:inline-flex; gap:4px; padding:4px; background:#fff; border:1px solid var(--border); border-radius:12px;
+       box-shadow:var(--shadow); margin-bottom:14px; }
+.tab{ border:none; background:transparent; padding:8px 16px; border-radius:9px; font-size:12px; font-weight:500;
+      color:var(--muted); cursor:pointer; }
+.tab:hover{ color:var(--title); }
+.tab.active{ background:var(--blue-soft); color:var(--blue); font-weight:600; }
+.formula{ display:inline-block; background:var(--violet-soft); color:var(--title); font-weight:600; padding:2px 10px;
+          border-radius:8px; margin:2px 0; }
+
+/* KPIs */
+.kpis{ display:grid; grid-template-columns:repeat(4, 1fr); gap:14px; margin-bottom:14px; }
+.kpi .num{ font-size:26px; font-weight:600; color:#1a1a18; line-height:1; margin-top:8px; }
+.kpi .sub{ font-size:11px; color:#bbb; margin-top:6px; }
+
+/* Insight */
+.insight{ background:#fff; border:1px solid var(--border); border-left:4px solid var(--blue); border-radius:12px;
+          padding:14px 16px; font-size:11px; line-height:1.7; color:var(--muted); box-shadow:var(--shadow); margin-bottom:14px; }
+.insight strong{ color:var(--text); font-weight:600; }
+
+/* Legend */
+.legend{ display:flex; gap:16px; flex-wrap:wrap; font-size:12px; color:#737b91; margin:0 0 12px; align-items:center; }
+.legend .sw{ display:inline-block; width:12px; height:12px; border-radius:4px; margin-right:6px; vertical-align:-1px; }
+.legend .scale{ display:inline-flex; align-items:center; gap:8px; }
+.legend .scale-bar{ display:inline-block; width:180px; height:12px; border-radius:6px; }
+.legend .scale-lbl{ font-size:11px; }
+.legend .scale-mid{ font-size:11px; color:var(--muted); }
+
+/* Table */
+.table-wrap{ overflow-x:auto; }
+table{ border-collapse:separate; border-spacing:0; min-width:100%; }
+thead th{ font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--light);
+          padding:8px 6px; border-bottom:1px solid #eee; text-align:center; white-space:nowrap; background:#fff; }
+thead tr.jrow th{ text-transform:none; letter-spacing:0; font-size:11px; color:var(--title); padding:6px 6px 4px; border-bottom:none; }
+thead tr.jrow th .jmeta{ display:block; font-size:10px; font-weight:500; color:var(--muted); }
+thead tr.crow th{ cursor:default; }
+th.left, td.left{ text-align:left; }
+tbody td{ font-size:12px; color:#333; padding:4px 6px; border-bottom:1px solid #f5f5f5; white-space:nowrap; }
+tbody tr.seg:hover td{ background:#fafafa; }
+tbody tr:last-child td{ border-bottom:none; }
+.sticky{ position:sticky; left:0; z-index:2; background:#fff; }
+td.segname{ font-weight:500; color:var(--text); padding-left:10px; min-width:170px; }
+td.num{ text-align:right; color:var(--muted); font-size:11px; padding-right:12px; }
+tr.total td{ background:#fafafe; font-weight:600; }
+tr.total td.segname{ color:var(--title); }
+.gstart{ border-left:1px solid #e3e3ea; }
+
+tr.section td{ padding:16px 10px 6px; border-bottom:1px solid #eee; font-size:12px; font-weight:600; color:var(--title); }
+tr.section td .icon{ margin-right:6px; }
+tr.section td .count{ font-size:10px; font-weight:500; color:var(--light); margin-left:6px; }
+
+td.idx{ padding:3px 4px; text-align:center; }
+.cell{ display:block; min-width:66px; padding:6px 6px; border-radius:8px; font-weight:600; font-size:11px;
+       color:#fff; cursor:default; border:2px solid transparent; }
+.cell.pos{ background:var(--green); }
+.cell.neg{ background:var(--red); }
+.cell.zero{ background:var(--muted); }
+.cell.na{ background:#f0f0f3; color:var(--light); font-weight:500; }
+.cell.low{ opacity:.45; }
+.cell.win{ border-color:var(--blue); box-shadow:inset 0 0 0 2px #fff; }
+
+/* Tooltip */
+.tooltip{ position:fixed; pointer-events:none; z-index:30; display:none; min-width:260px; max-width:340px;
+          background:#fff; border:1px solid var(--border); border-radius:10px; padding:10px 14px;
+          font-size:11px; color:var(--text); box-shadow:0 8px 24px rgba(20,30,60,.14); }
+.tooltip .tt-title{ font-weight:600; font-size:12px; color:var(--title); }
+.tooltip .tt-sub{ color:var(--muted); font-size:10px; margin-bottom:6px; }
+.tooltip .tt-row{ display:flex; justify-content:space-between; gap:16px; line-height:1.8; }
+.tooltip .tt-row span:first-child{ color:var(--muted); }
+.tooltip .tt-sep{ border-top:1px solid #f0f0f0; margin:4px 0; }
+.tooltip .tt-note{ color:var(--red); font-size:10px; margin-top:4px; }
+
+/* Empty / error state */
+.empty{ text-align:center; padding:48px 22px; }
+.empty .msg{ font-size:16px; font-weight:600; color:var(--title); margin-bottom:8px; }
+.empty code{ background:var(--blue-soft); color:var(--blue); padding:2px 8px; border-radius:6px; font-size:12px; }
+.empty .sub{ font-size:11px; color:var(--muted); margin-top:10px; }
+
+footer{ margin-top:36px; border-top:1px solid #eee; padding-top:14px; font-size:10px; color:var(--muted); }
+
+@media (max-width: 900px){
+  .kpis{ grid-template-columns:repeat(2, 1fr); }
+  .header{ flex-direction:column; align-items:flex-start; }
+  .updated{ text-align:left; }
+  .filter{ min-width:0; width:100%; }
+}
+@media (max-width: 520px){
+  .kpis{ grid-template-columns:1fr; }
+}
+</style>
+<!-- Generado por fetch_data.py. Si no existe, el dashboard intenta fetch(data/matrix.json). -->
+<script src="data/matrix.js"></script>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div>
+      <h1>Análisis de Performance de Mensajes por Audiencia</h1>
+      <div class="journeys" id="journeys"></div>
+    </div>
+    <div class="updated">
+      <div class="label">Última actualización</div>
+      <div class="value" id="updated">—</div>
+    </div>
+  </div>
+
+  <div class="filters" id="filters"></div>
+  <div class="tabs" id="tabs" style="display:none">
+    <button type="button" class="tab active" data-mode="ctr">CTR por campaña</button>
+    <button type="button" class="tab" data-mode="indice">Índice vs. promedio del test</button>
+  </div>
+  <div id="content"></div>
+
+  <footer id="footer">
+    Fuente: Insider Architect (sot.insider_mobile_app_events: push_delivered = impresión, push_session = clic) × audiencia tmp.socials_variables_2nd_trip / tmp.socials_trafico_2nd_trip. Tests definidos en tests.csv.
+  </footer>
+</div>
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const LOW_CLICKS = 10;
+  const fmtInt = (n) => (n == null ? '—' : Number(n).toLocaleString('es-AR'));
+  const fmtCtr = (x) => (x == null ? '—' : x.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '%');
+  const fmtDate = (s) => (s && /^\d{4}-\d{2}-\d{2}$/.test(s) ? s.slice(8, 10) + '/' + s.slice(5, 7) : s || '');
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  // CTR = (Clics / Impresiones) x 100
+  const ctr = (clk, imp) => (imp > 0 ? (clk / imp) * 100 : null);
+
+  let DATA = null;
+  const filters = { tests: [], paises: [] };   // [] = sin restricción
+  let rendered = [];               // filas visibles (para el tooltip)
+  let visibleTests = [];           // tests visibles, con sus campañas
+  // 'ctr':    celda = CTR; color vs. CTR promedio ponderado del segmento en su test (clics totales / impresiones totales).
+  // 'indice': celda = CTR variante ÷ promedio simple de los CTR de las variantes del segmento en su test − 1.
+  let mode = 'ctr';
+
+  function showError(detail) {
+    $('content').innerHTML =
+      '<div class="card empty">' +
+      '<div class="msg">Ejecutá fetch_data.py para generar los datos</div>' +
+      '<div><code>python fetch_data.py</code></div>' +
+      '<div class="sub">No se pudo leer data/matrix.js ni data/matrix.json' + (detail ? ' (' + esc(detail) + ')' : '') + '.</div>' +
+      '</div>';
+  }
+
+  function load() {
+    if (window.MATRIX_DATA) return Promise.resolve(window.MATRIX_DATA);
+    return fetch('data/matrix.json', { cache: 'no-store' }).then((r) => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    });
+  }
+
+  const matchFilter = (value, selected) => selected.length === 0 || selected.includes(String(value));
+
+  // ------------------------------------------------------------------ filtros (multiselección)
+  // Sin Ctrl/Cmd: reemplaza la selección del filtro. Con Ctrl/Cmd: agrega o quita la opción.
+  // Dentro de un filtro = OR; entre filtros = AND. Selección vacía = sin restricción.
+  const FILTERS = [
+    { key: 'tests', label: 'Test', all: 'Todos los tests',
+      options: () => (DATA.tests || []).map((t) => ({ value: t.label, meta: (t.paises || []).join(', ') + ' · desde ' + fmtDate(t.fecha_inicio) })) },
+    { key: 'paises', label: 'País del social', all: 'Todos los países',
+      options: () => (DATA.paises || []).map((p) => ({ value: p, meta: '' })) },
+  ];
+
+  function buildFilters() {
+    $('filters').innerHTML = FILTERS.map((f) =>
+      '<div class="filter" id="f-' + f.key + '"><span class="label">' + esc(f.label) + '</span>' +
+      '<button type="button" class="filter-trigger"></button>' +
+      '<div class="filter-menu">' +
+      f.options().map((o) => '<div class="filter-option" data-value="' + esc(o.value) + '"><span class="box"></span><span>' + esc(o.value) +
+        '</span>' + (o.meta ? '<span class="meta">' + esc(o.meta) + '</span>' : '') + '</div>').join('') +
+      '<div class="filter-hint">Click: elegir uno · Ctrl/Cmd + click: sumar o quitar</div>' +
+      '</div></div>').join('');
+
+    FILTERS.forEach((f) => {
+      filters[f.key] = f.options().map((o) => o.value);   // arranca con todo seleccionado
+      const box = $('f-' + f.key);
+      box.querySelector('.filter-trigger').addEventListener('click', (e) => {
+        e.stopPropagation();
+        document.querySelectorAll('.filter.open').forEach((x) => { if (x !== box) x.classList.remove('open'); });
+        box.classList.toggle('open');
+      });
+      box.querySelectorAll('.filter-option').forEach((opt) => {
+        opt.addEventListener('mousedown', (e) => e.preventDefault());
+        opt.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const v = opt.dataset.value;
+          const sel = filters[f.key];
+          if (e.ctrlKey || e.metaKey) {
+            filters[f.key] = sel.includes(v) ? sel.filter((x) => x !== v) : sel.concat(v);
+          } else {
+            filters[f.key] = [v];
+            box.classList.remove('open');
+          }
+          syncFilters();
+          render();
+        });
+      });
+    });
+    document.addEventListener('click', () => document.querySelectorAll('.filter.open').forEach((x) => x.classList.remove('open')));
+    syncFilters();
+  }
+
+  function syncFilters() {
+    FILTERS.forEach((f) => {
+      const sel = filters[f.key];
+      const n = f.options().length;
+      document.querySelectorAll('#f-' + f.key + ' .filter-option').forEach((opt) => {
+        const on = sel.includes(opt.dataset.value);
+        opt.classList.toggle('selected', on);
+        opt.querySelector('.box').textContent = on ? '☑' : '☐';
+      });
+      let txt;
+      if (sel.length === 0 || sel.length === n) txt = f.all + ' (' + n + ')';
+      else if (sel.length === 1) txt = sel[0];
+      else txt = sel.length + ' seleccionados';
+      document.querySelector('#f-' + f.key + ' .filter-trigger').textContent = txt;
+    });
+    visibleTests = (DATA.tests || []).filter((t) => matchFilter(t.label, filters.tests));
+    $('journeys').innerHTML = visibleTests.map((t) => '<span class="pill">' + esc(t.label) + '</span>').join('');
+  }
+
+  // ------------------------------------------------------------------ agregación
+  function aggregate() {
+    // dim -> seg -> journey -> campaña -> {imp, clk}
+    const agg = {};
+    DATA.celdas.forEach((c) => {
+      if (!matchFilter(c.j, filters.tests) || !matchFilter(c.p, filters.paises)) return;
+      const d = agg[c.d] || (agg[c.d] = {});
+      const s = d[c.s] || (d[c.s] = {});
+      const j = s[c.j] || (s[c.j] = {});
+      const v = j[c.v] || (j[c.v] = { imp: 0, clk: 0 });
+      v.imp += c.imp;
+      v.clk += c.clk;
+    });
+    return agg;
+  }
+
+  // Una fila: por journey, stats de cada campaña + CTR promedio del segmento dentro de ese journey.
+  function makeRow(dimKey, segmento, porJourney) {
+    let imp = 0, clk = 0;
+    const journeys = {};
+    visibleTests.forEach((t) => {
+      const pj = porJourney[t.label] || {};
+      let jImp = 0, jClk = 0;
+      const camp = {};
+      t.campaigns.forEach((c) => {
+        const s = pj[c.label] || { imp: 0, clk: 0 };
+        jImp += s.imp; jClk += s.clk;
+        camp[c.label] = { imp: s.imp, clk: s.clk, ctr: ctr(s.clk, s.imp) };
+      });
+      imp += jImp; clk += jClk;
+      // Promedio simple: media de los CTR de las variantes con impresiones en este segmento.
+      const ctrs = Object.values(camp).map((x) => x.ctr).filter((x) => x != null);
+      const ctrSimple = ctrs.length ? ctrs.reduce((a, b) => a + b, 0) / ctrs.length : null;
+      journeys[t.label] = { camp, imp: jImp, clk: jClk, ctrProm: ctr(jClk, jImp), ctrSimple, nVar: ctrs.length };
+    });
+    return { dimension: dimKey, segmento, journeys, imp, clk };
+  }
+
+  // ------------------------------------------------------------------ escala de color
+  // El color depende de la diferencia del CTR de la campaña vs. el CTR promedio del segmento en su test:
+  // −SCALE% o menos = rojo · −SCALE/2 = naranja · 0 = amarillo · +SCALE/2 = verde claro · +SCALE% o más = verde.
+  const SCALE = 50;
+  const STOPS = [
+    [-1.0, [214, 69, 69]],    // rojo
+    [-0.5, [238, 138, 79]],   // naranja
+    [ 0.0, [242, 201, 76]],   // amarillo
+    [ 0.5, [140, 192, 132]],  // verde claro
+    [ 1.0, [8, 116, 86]],     // verde
+  ];
+  function colorFor(diffPct) {
+    const x = Math.max(-1, Math.min(1, diffPct / SCALE));
+    let i = 0;
+    while (i < STOPS.length - 2 && x > STOPS[i + 1][0]) i++;
+    const [x0, c0] = STOPS[i], [x1, c1] = STOPS[i + 1];
+    const t = (x - x0) / (x1 - x0);
+    const rgb = c0.map((v, k) => Math.round(v + (c1[k] - v) * t));
+    const lum = (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
+    return { bg: 'rgb(' + rgb.join(',') + ')', fg: lum > 0.6 ? '#16203f' : '#ffffff' };
+  }
+  const indice = (c, prom) => (c == null || !prom ? null : Math.round((c / prom - 1) * 100));
+  const fmtIdx = (i) => (i == null ? '—' : (i > 0 ? '+' : i < 0 ? '−' : '') + Math.abs(i) + '%');
+  const legendGradient = () => 'linear-gradient(90deg,' + STOPS.map(([x, c]) => 'rgb(' + c.join(',') + ') ' + ((x + 1) * 50) + '%').join(',') + ')';
+
+  function rowHtml(f, idx, extraClass) {
+    let html = '<tr class="seg ' + (extraClass || '') + '"><td class="segname sticky">' + esc(f.segmento) + '</td>' +
+      '<td class="num">' + fmtInt(f.imp) + '</td>';
+    visibleTests.forEach((t, ti) => {
+      const J = f.journeys[t.label];
+      const ctrs = t.campaigns.map((c) => J.camp[c.label].ctr).filter((x) => x != null);
+      const best = ctrs.length > 1 && Math.max(...ctrs) > 0 ? Math.max(...ctrs) : null;   // sin clics no hay ganador
+      t.campaigns.forEach((c, ci) => {
+        const s = J.camp[c.label];
+        const diff = mode === 'indice' ? indice(s.ctr, J.ctrSimple) : indice(s.ctr, J.ctrProm);
+        const label = mode === 'indice' ? fmtIdx(diff) : fmtCtr(s.ctr);
+        const sinValor = s.ctr == null || (mode === 'indice' && diff == null);
+        let cls = sinValor ? 'na' : '';
+        let style = '';
+        if (!sinValor) {
+          const col = colorFor(diff == null ? 0 : diff);
+          style = ' style="background:' + col.bg + ';color:' + col.fg + '"';
+        }
+        cls += (best != null && s.ctr === best ? ' win' : '') + (s.ctr != null && s.clk < LOW_CLICKS ? ' low' : '');
+        html += '<td class="idx' + (ci === 0 ? ' gstart' : '') + '"><span class="cell ' + cls + '"' + style + ' data-row="' + idx +
+          '" data-t="' + ti + '" data-c="' + ci + '">' + label + '</span></td>';
+      });
+    });
+    return html + '</tr>';
+  }
+
+  function render() {
+    const meta = DATA.metadata || {};
+    const minImp = meta.min_delivered || 0;
+    rendered = [];
+
+    if (!visibleTests.length) {
+      $('content').innerHTML = '<div class="card empty"><div class="msg">Elegí al menos un test</div></div>';
+      return;
+    }
+    const agg = aggregate();
+
+    // Total: traveler_type incluye a todos los socials del push (los sin dato van a "Sin datos").
+    const totJ = {};
+    Object.values(agg.traveler_type || {}).forEach((porJ) => {
+      Object.entries(porJ).forEach(([j, porC]) => {
+        Object.entries(porC).forEach(([c, s]) => {
+          const tj = totJ[j] || (totJ[j] = {});
+          const t = tj[c] || (tj[c] = { imp: 0, clk: 0 });
+          t.imp += s.imp; t.clk += s.clk;
+        });
+      });
+    });
+    const total = makeRow('total', 'Total', totJ);
+    if (!total.imp) {
+      $('content').innerHTML = '<div class="card empty"><div class="msg">No hay impresiones para la selección</div>' +
+        '<div class="sub">Revisá los filtros de test y país, o tests.csv y ejecutá fetch_data.py.</div></div>';
+      return;
+    }
+    const nCamp = visibleTests.reduce((a, t) => a + t.campaigns.length, 0);
+
+    let html =
+      '<div class="kpis">' +
+      kpi('Impresiones', fmtInt(total.imp), 'eventos push_delivered') +
+      kpi('Clics', fmtInt(total.clk), 'eventos push_session') +
+      kpi('CTR', fmtCtr(ctr(total.clk, total.imp)), 'clics ÷ impresiones × 100') +
+      kpi('Tests', visibleTests.length, nCamp + ' campañas') +
+      '</div>' +
+      (mode === 'indice'
+        ? '<div class="insight"><span class="formula">Índice = CTR de la variante ÷ CTR promedio del test − 1</span><br>' +
+          'Mide qué variante gana <strong>dentro de cada test</strong> para cada audiencia (cada fila). El CTR promedio del test es el ' +
+          '<strong>promedio simple</strong> de los CTR de las variantes de ese test en esa audiencia (cada variante pesa igual). ' +
+          'Ejemplo: 2,73% ÷ 2,50% − 1 = +9%. El color va del verde (+' + SCALE + '% o más) al amarillo (0, en el promedio) y al rojo (−' + SCALE +
+          '% o menos). El borde azul marca la variante ganadora del test en esa fila. Las celdas atenuadas tienen menos de ' + LOW_CLICKS +
+          ' clics: tomalas con cuidado. Se muestran segmentos con al menos ' + fmtInt(minImp) + ' impresiones.</div>'
+        : '<div class="insight"><strong>CTR = (Clics ÷ Impresiones) × 100</strong><br>' +
+          'Cada celda es el CTR de esa campaña para ese segmento. Cada test agrupa sus journeys de todos los países; para ver un país, usá el filtro ' +
+          'o la sección País. El color compara la campaña contra el CTR promedio del segmento <strong>dentro de su test</strong>: del verde ' +
+          '(+' + SCALE + '% o más sobre el promedio) al amarillo (en el promedio) y al rojo (−' + SCALE + '% o menos). El borde azul marca la campaña ' +
+          'con mayor CTR del test en esa fila. Las celdas atenuadas tienen menos de ' + LOW_CLICKS + ' clics: tomalas con cuidado. ' +
+          'Se muestran segmentos con al menos ' + fmtInt(minImp) + ' impresiones.</div>');
+
+    // Encabezado doble: test -> campañas
+    let head1 = '<tr class="jrow"><th class="left sticky" rowspan="2">Segmento</th><th rowspan="2">Impresiones</th>';
+    let head2 = '<tr class="crow">';
+    visibleTests.forEach((t) => {
+      head1 += '<th class="gstart" colspan="' + t.campaigns.length + '">' + esc(t.label) +
+        '<span class="jmeta">' + esc((t.paises || []).join(', ')) + ' · desde ' + fmtDate(t.fecha_inicio) + '</span></th>';
+      t.campaigns.forEach((c, ci) => {
+        head2 += '<th' + (ci === 0 ? ' class="gstart"' : '') + ' title="' + esc(c.mensaje || c.label) + '">' + esc(c.label) + '</th>';
+      });
+    });
+    head1 += '</tr>';
+    head2 += '</tr>';
+
+    html += '<div class="card">' +
+      '<div class="legend">' +
+      '<span class="scale"><span class="scale-lbl">−' + SCALE + '% o menos</span><span class="scale-bar" style="background:' + legendGradient() +
+        '"></span><span class="scale-lbl">+' + SCALE + '% o más</span><span class="scale-mid">' +
+        (mode === 'indice' ? 'índice vs. promedio simple del test en la audiencia' : 'vs. CTR promedio del segmento en su test') + '</span></span>' +
+      '<span><span class="sw" style="background:rgb(140,192,132);opacity:.45"></span>Menos de ' + LOW_CLICKS + ' clics</span>' +
+      '<span><span class="sw" style="background:#fff;border:2px solid var(--blue)"></span>Mayor CTR del test</span>' +
+      '</div>' +
+      '<div class="table-wrap"><table><thead>' + head1 + head2 + '</thead><tbody>';
+
+    const ncols = nCamp + 2;
+    rendered.push(total);
+    html += rowHtml(total, 0, 'total');
+
+    (DATA.dimensiones || []).forEach((dim) => {
+      const porSeg = agg[dim.key] || {};
+      let rows = (dim.segmentos || Object.keys(porSeg))
+        .filter((s) => porSeg[s])
+        .map((s) => makeRow(dim.key, s, porSeg[s]))
+        .filter((r) => r.imp >= minImp);
+      if (!rows.length) return;
+      html += '<tr class="section"><td class="sticky" colspan="2"><span class="icon">' + esc(dim.icon || '') + '</span>' +
+        esc(dim.label) + '<span class="count">' + rows.length + ' segmentos</span></td><td colspan="' + (ncols - 2) + '"></td></tr>';
+      rows.forEach((r) => {
+        r.dimLabel = dim.label;
+        rendered.push(r);
+        html += rowHtml(r, rendered.length - 1);
+      });
+    });
+    html += '</tbody></table></div></div>';
+    $('content').innerHTML = html;
+  }
+
+  function kpi(label, num, sub) {
+    return '<div class="card kpi"><div class="label">' + esc(label) + '</div><div class="num">' + num +
+      '</div><div class="sub">' + esc(sub) + '</div></div>';
+  }
+
+  // ------------------------------------------------------------------ tooltip
+  function bindTooltip() {
+    const tt = $('tooltip');
+    const content = $('content');
+    content.addEventListener('mouseover', (e) => {
+      const cell = e.target.closest('.cell');
+      if (!cell) return;
+      const f = rendered[+cell.dataset.row];
+      const t = visibleTests[+cell.dataset.t];
+      const c = t.campaigns[+cell.dataset.c];
+      const J = f.journeys[t.label];
+      const s = J.camp[c.label];
+      const seg = f.dimension === 'total' ? 'Total' : (f.dimLabel + ': ' + f.segmento);
+      if (mode === 'indice') {
+        const idx = indice(s.ctr, J.ctrSimple);
+        tt.innerHTML =
+          '<div class="tt-title">' + esc(c.label) + ' · ' + esc(seg) + '</div>' +
+          '<div class="tt-sub">' + esc(t.label) + (c.mensaje ? ' — ' + esc(c.mensaje) : '') + '</div>' +
+          row('Índice', '<strong>' + fmtIdx(idx) + '</strong>') +
+          (s.ctr != null && J.ctrSimple ? row('Cálculo', fmtCtr(s.ctr) + ' ÷ ' + fmtCtr(J.ctrSimple) + ' − 1') : '') +
+          '<div class="tt-sep"></div>' +
+          row('CTR variante', fmtCtr(s.ctr)) +
+          row('Clics / impresiones', fmtInt(s.clk) + ' / ' + fmtInt(s.imp)) +
+          row('CTR promedio del test (simple)', fmtCtr(J.ctrSimple)) +
+          row('Variantes promediadas', String(J.nVar)) +
+          (s.ctr != null && s.clk < LOW_CLICKS ? '<div class="tt-note">Menos de ' + LOW_CLICKS + ' clics: resultado poco confiable.</div>' : '');
+        tt.style.display = 'block';
+        return;
+      }
+      tt.innerHTML =
+        '<div class="tt-title">' + esc(c.label) + ' · ' + esc(seg) + '</div>' +
+        '<div class="tt-sub">' + esc(t.label) + (c.mensaje ? ' — ' + esc(c.mensaje) : '') + '</div>' +
+        row('CTR campaña', '<strong>' + fmtCtr(s.ctr) + '</strong>') +
+        row('Clics / impresiones', fmtInt(s.clk) + ' / ' + fmtInt(s.imp)) +
+        '<div class="tt-sep"></div>' +
+        row('CTR promedio del segmento (test)', fmtCtr(J.ctrProm)) +
+        row('Clics / impresiones (test)', fmtInt(J.clk) + ' / ' + fmtInt(J.imp)) +
+        row('Diferencia vs. promedio', fmtIdx(indice(s.ctr, J.ctrProm))) +
+        (s.ctr != null && s.clk < LOW_CLICKS ? '<div class="tt-note">Menos de ' + LOW_CLICKS + ' clics: resultado poco confiable.</div>' : '');
+      tt.style.display = 'block';
+    });
+    content.addEventListener('mousemove', (e) => {
+      if (tt.style.display !== 'block') return;
+      const pad = 14;
+      let x = e.clientX + pad, y = e.clientY + pad;
+      const r = tt.getBoundingClientRect();
+      if (x + r.width > window.innerWidth - 8) x = e.clientX - r.width - pad;
+      if (y + r.height > window.innerHeight - 8) y = e.clientY - r.height - pad;
+      tt.style.left = x + 'px';
+      tt.style.top = y + 'px';
+    });
+    content.addEventListener('mouseout', (e) => {
+      if (e.target.closest('.cell')) tt.style.display = 'none';
+    });
+  }
+  function row(k, v) { return '<div class="tt-row"><span>' + esc(k) + '</span><span>' + v + '</span></div>'; }
+
+  load().then((data) => {
+    DATA = data;
+    if (!DATA.celdas || !DATA.tests || !DATA.tests.length || !DATA.tests[0].campaigns) {
+      throw new Error('matrix.json con formato viejo: volvé a ejecutar fetch_data.py');
+    }
+    const meta = DATA.metadata || {};
+    if (meta.fecha_calculo) {
+      const d = new Date(meta.fecha_calculo);
+      $('updated').textContent = isNaN(d) ? meta.fecha_calculo : d.toLocaleString('es-AR', { dateStyle: 'medium', timeStyle: 'short' });
+    }
+    $('footer').textContent += ' Mínimo de impresiones por segmento: ' + fmtInt(meta.min_delivered) + '.';
+    buildFilters();
+    bindTooltip();
+    $('tabs').style.display = '';
+    const setMode = (m) => {
+      mode = m;
+      $('tabs').querySelectorAll('.tab').forEach((x) => x.classList.toggle('active', x.dataset.mode === m));
+      try { history.replaceState(null, '', m === 'indice' ? '#indice' : '#'); } catch (e) { /* file:// sin history */ }
+    };
+    $('tabs').querySelectorAll('.tab').forEach((b) => b.addEventListener('click', () => { setMode(b.dataset.mode); render(); }));
+    if (location.hash === '#indice') setMode('indice');
+    render();
+  }).catch((err) => showError(err && err.message));
+})();
+</script>
+</body>
+</html>
