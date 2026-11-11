@@ -1,0 +1,5 @@
+# Parámetros de la matriz.
+# Los journeys y campañas a analizar se definen en tests.csv (raíz del proyecto):
+#   una fila por campaña; el nombre que se muestra es lo que sigue al último "-" de clt_c.
+settings:
+  min_delivered: 100    # segmentos con menos impresiones totales no se muestran
